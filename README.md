@@ -3,6 +3,34 @@
 Unpacked Chrome extension build (from `aayush-filing/extension/dist`, built 2026-11-03).
 No dev/test session baked in — this is a clean build; you sign in normally via the popup.
 
+## One-time setup on a new laptop (recommended — no more re-downloading)
+
+```
+git clone https://github.com/Aksh28/aayush-filing-extension-dist.git
+```
+
+Then in Chrome: `chrome://extensions` → **Developer mode** → **Load unpacked** →
+select the `dist` folder inside the cloned repo (not the repo root).
+
+## Every future update, from then on
+
+```
+cd aayush-filing-extension-dist
+git pull
+```
+
+Then go to `chrome://extensions` and click the circular **reload** icon on
+the extension's card. That's it — no re-download, no re-extract, no
+"Load unpacked" again. The folder Chrome is already pointed at just got
+updated in place.
+
+## Alternative: the zip (one-off download, no git)
+
+If you'd rather not use git on that laptop, `aayush-filing-extension.zip`
+below has the same files — but every future fix means repeating the
+download/extract/Load-unpacked steps from scratch. The `git clone` + `git
+pull` route above avoids that entirely.
+
 **2026-11-03 update** — fixed three real bugs found during live testing on the government portal:
 - "Add" button for a second/third attendant was a silent no-op — the button's text really is exactly "Add", but the code was picking the first element anywhere on the page whose text normalized to "add", which can grab the wrong control on a long form with more than one "Add" button. Now scoped to only match within the attendant section.
 - Date of Birth (patient and attendant) never filled — the portal expects `DD/MM/YYYY`, our data is ISO `YYYY-MM-DD` — now converted at fill time.

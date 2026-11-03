@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Aayush Filing Helper",
+  "version": "0.1.0",
+  "description": "Fills verified case data into the Medical/Ayush Visa Portal -- you still solve the CAPTCHA and click Submit yourself.",
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://indianfrro.gov.in/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "https://indianfrro.gov.in/*",
+    "https://nklvtvcbzfuqmfdugtnz.supabase.co/*"
+  ]
+}
