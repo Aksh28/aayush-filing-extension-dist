@@ -136,6 +136,8 @@
       }
       if (stateEl?.id) stateFilled = fillField(`#${cssEscape(stateEl.id)}`, stateValue);
     }
+    const LOG = "[AayushFiling City]";
+    console.log(LOG, "start", { occurrence, stateValue, cityValue, stateOptionValue, cacheHasState: cityOptionsCache.has(stateOptionValue) });
     if (!cityValue) return { stateFilled, cityFilled: false };
     const target = cityValue.trim().toLowerCase();
     const firstTry = await pollForCityMatch(
@@ -148,25 +150,41 @@
       pollMs,
       Math.min(timeoutMs, 1500)
     );
+    console.log(LOG, "firstTry (live AJAX path)", { filled: firstTry.filled, isSelect: firstTry.isSelect, optionCount: firstTry.options?.length ?? null });
     if (firstTry.filled) {
       if (stateOptionValue && firstTry.options) cityOptionsCache.set(stateOptionValue, firstTry.options);
+      console.log(LOG, "SUCCESS via live path", { cachedState: stateOptionValue });
       return { stateFilled, cityFilled: true };
     }
-    if (!firstTry.isSelect) return { stateFilled, cityFilled: false };
+    if (!firstTry.isSelect) {
+      console.log(LOG, "FAILED -- city field is not a <select>, no cache fallback applies");
+      return { stateFilled, cityFilled: false };
+    }
     const cached = stateOptionValue ? cityOptionsCache.get(stateOptionValue) : void 0;
+    console.log(LOG, "checking cache fallback", { stateOptionValue, hasCached: !!cached, cachedOptionTexts: cached?.map((o) => o.text) ?? null });
     if (cached) {
       const cityEl = findNthFieldByLabel(root, scope, cityLabel, occurrence);
+      console.log(LOG, "cityEl for rebuild", { found: !!cityEl, isSelect: cityEl instanceof HTMLSelectElement, id: cityEl?.id });
       if (cityEl instanceof HTMLSelectElement && cityEl.id) {
         rebuildSelectOptions(cityEl, cached);
-        return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
+        const filled = fillField(`#${cssEscape(cityEl.id)}`, cityValue);
+        console.log(LOG, filled ? "SUCCESS via cache rebuild" : "FAILED -- rebuilt select but fillField still failed", {
+          finalValue: cityEl.options[cityEl.selectedIndex]?.textContent
+        });
+        return { stateFilled, cityFilled: filled };
       }
     }
     const remaining = timeoutMs - 1500;
-    if (remaining <= 0) return { stateFilled, cityFilled: false };
+    if (remaining <= 0) {
+      console.log(LOG, "FAILED -- no cache available and no time left for a second live attempt");
+      return { stateFilled, cityFilled: false };
+    }
+    console.log(LOG, "no cache available -- trying the live path again with the rest of the timeout", { remaining });
     const secondTry = await pollForCityMatch(root, scope, cityLabel, occurrence, cityValue, target, pollMs, remaining);
     if (secondTry.filled && stateOptionValue && secondTry.options) {
       cityOptionsCache.set(stateOptionValue, secondTry.options);
     }
+    console.log(LOG, secondTry.filled ? "SUCCESS via 2nd live attempt" : "FAILED -- gave up entirely", { filled: secondTry.filled });
     return { stateFilled, cityFilled: secondTry.filled };
   }
 
