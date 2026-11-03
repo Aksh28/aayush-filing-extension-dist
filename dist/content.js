@@ -110,7 +110,11 @@
       if (cityEl instanceof HTMLSelectElement) {
         const hasMatch = Array.from(cityEl.options).some((o) => o.textContent?.trim().toLowerCase() === target);
         if (hasMatch && cityEl.id) {
-          return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
+          if (!fillField(`#${cssEscape(cityEl.id)}`, cityValue)) return { stateFilled, cityFilled: false };
+          return {
+            stateFilled,
+            cityFilled: await settleCityFill(root, scope, cityLabel, occurrence, target, options.settleMs)
+          };
         }
       } else if (cityEl?.id) {
         return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
@@ -118,6 +122,18 @@
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
     return { stateFilled, cityFilled: false };
+  }
+  async function settleCityFill(root, scope, cityLabel, occurrence, target, settleMs = 300) {
+    await new Promise((resolve) => setTimeout(resolve, settleMs));
+    const recheck = findNthFieldByLabel(root, scope, cityLabel, occurrence);
+    if (recheck instanceof HTMLSelectElement) {
+      const current = recheck.options[recheck.selectedIndex]?.textContent?.trim().toLowerCase();
+      if (current === target) return true;
+      const option = Array.from(recheck.options).find((o) => o.textContent?.trim().toLowerCase() === target);
+      if (!option || !recheck.id) return false;
+      return fillField(`#${cssEscape(recheck.id)}`, option.textContent ?? "");
+    }
+    return true;
   }
 
   // src/attendants.ts
@@ -204,8 +220,14 @@
       if (!committed) {
         return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: true };
       }
+      tickLatestOwnerCheckbox(root);
     }
     return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: false };
+  }
+  function tickLatestOwnerCheckbox(root) {
+    const lastBlock = root.querySelector("#owners")?.lastElementChild;
+    const checkbox = lastBlock?.querySelector('input[type="checkbox"][name="ownchecks"]');
+    checkbox?.click();
   }
 
   // src/patientTreatmentFields.ts

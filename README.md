@@ -31,6 +31,10 @@ below has the same files — but every future fix means repeating the
 download/extract/Load-unpacked steps from scratch. The `git clone` + `git
 pull` route above avoids that entirely.
 
+**2026-11-03 update (3)** — the attendant rebuild below worked live (confirmed). Two follow-up bugs found and fixed from that same live test:
+- Each snapshotted attendant block has its own `ownchecks` checkbox that has to be ticked for that attendant to actually be selected/included — our code never touched it. Now ticked automatically right after each block is confirmed added.
+- The 2nd attendant's City/District silently came back empty even though it filled correctly — the entry area's own AJAX-driven City/District reset (same mechanism as State→City) was landing late, after our fill, and wiping it back out. Now re-checked ~300ms after filling and re-filled if something reset it underneath us.
+
 **2026-11-03 update (2)** — rebuilt how additional attendants get added, based on the real mechanism confirmed live: the form has exactly ONE reusable entry area (not N clones). Clicking Add snapshots whatever's currently in it into a read-only summary block, then clears it for the next attendant; the last attendant deliberately stays sitting in the entry area, uncommitted, and submits with the rest of the form. The old code was scanning for a new labeled "Surname" field to confirm Add worked — but the snapshotted blocks have no label text at all, so that could never succeed regardless of whether Add itself worked. Now confirmed by watching the attendant list's block count increase instead.
 
 **2026-11-03 update (1)** — fixed real bugs found during live testing on the government portal, confirmed against the actual portal HTML:
