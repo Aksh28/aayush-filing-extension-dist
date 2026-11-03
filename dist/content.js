@@ -110,19 +110,7 @@
       if (cityEl instanceof HTMLSelectElement) {
         const hasMatch = Array.from(cityEl.options).some((o) => o.textContent?.trim().toLowerCase() === target);
         if (hasMatch && cityEl.id) {
-          if (!fillField(`#${cssEscape(cityEl.id)}`, cityValue)) return { stateFilled, cityFilled: false };
-          return {
-            stateFilled,
-            cityFilled: await settleCityFill(
-              root,
-              scope,
-              cityLabel,
-              occurrence,
-              target,
-              options.settleMs,
-              options.settleIntervalMs
-            )
-          };
+          return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
         }
       } else if (cityEl?.id) {
         return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
@@ -130,28 +118,6 @@
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
     return { stateFilled, cityFilled: false };
-  }
-  async function settleCityFill(root, scope, cityLabel, occurrence, target, settleMs = 2500, intervalMs = 150) {
-    const deadline = Date.now() + settleMs;
-    let lastResult = true;
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
-      const recheck = findNthFieldByLabel(root, scope, cityLabel, occurrence);
-      if (!(recheck instanceof HTMLSelectElement)) return true;
-      const current = recheck.options[recheck.selectedIndex]?.textContent?.trim().toLowerCase();
-      if (current === target) {
-        lastResult = true;
-        continue;
-      }
-      const option = Array.from(recheck.options).find((o) => o.textContent?.trim().toLowerCase() === target);
-      if (option && recheck.id) {
-        fillField(`#${cssEscape(recheck.id)}`, option.textContent ?? "");
-        lastResult = true;
-      } else {
-        lastResult = false;
-      }
-    }
-    return lastResult;
   }
 
   // src/attendants.ts
