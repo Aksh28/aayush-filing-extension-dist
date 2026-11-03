@@ -223,6 +223,7 @@
       return { attendantsFilled: 0, fieldsFilled: 0, fieldsTotal: 0, stoppedEarly: true };
     }
     const clickAdd = options.clickAdd ?? (() => findAddButton(root)?.click());
+    const postAddSettleMs = options.postAddSettleMs ?? 2e3;
     let attendantsFilled = 0;
     let fieldsFilled = 0;
     let fieldsTotal = 0;
@@ -239,6 +240,7 @@
         return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: true };
       }
       tickLatestOwnerCheckbox(root);
+      await new Promise((resolve) => setTimeout(resolve, postAddSettleMs));
     }
     return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: false };
   }

@@ -31,6 +31,8 @@ below has the same files — but every future fix means repeating the
 download/extract/Load-unpacked steps from scratch. The `git clone` + `git
 pull` route above avoids that entirely.
 
+**2026-11-03 update (5)** — found the real cause of the City/District miss: it only ever happens from the 2nd attendant onward, never the 1st, and never when done by hand. Clicking Add doesn't just clear the entry area for the next attendant -- it re-triggers the same City/District AJAX reset the next attendant's own State fill depends on, a real network round-trip with no event to wait on. A human naturally pauses here; our script didn't, so it could fill the next attendant's city correctly and then watch it get stomped by that stale reset landing late. Fixed with a ~2s pause after each Add, before starting the next attendant's fill, so it's (almost certainly) never racing that reset. The earlier reassert-after-fill attempt stays in as cheap extra insurance.
+
 **2026-11-03 update (4)** — the checkbox fix below worked live (confirmed). The 2nd attendant's City/District still didn't hold after a single 300ms recheck — so instead of one retry, it now keeps re-asserting the correct option for ~2.5 seconds after filling, re-filling every time something knocks it off, since re-filling an already-correct value is harmless.
 
 **2026-11-03 update (3)** — the attendant rebuild below worked live (confirmed). Two follow-up bugs found and fixed from that same live test:
