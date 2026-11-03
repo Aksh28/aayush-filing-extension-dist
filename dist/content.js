@@ -94,30 +94,80 @@
     }
     return { filled, total };
   }
-  async function fillStateThenCity(root, scope, stateLabel, cityLabel, stateValue, cityValue, occurrence, options = {}) {
-    const pollMs = options.pollMs ?? 200;
-    const timeoutMs = options.timeoutMs ?? 4e3;
-    let stateFilled = false;
-    if (stateValue) {
-      const stateEl = findNthFieldByLabel(root, scope, stateLabel, occurrence);
-      if (stateEl?.id) stateFilled = fillField(`#${cssEscape(stateEl.id)}`, stateValue);
+  var cityOptionsCache = /* @__PURE__ */ new Map();
+  function rebuildSelectOptions(select, options) {
+    select.innerHTML = "";
+    for (const o of options) {
+      const opt = document.createElement("option");
+      opt.value = o.value;
+      opt.textContent = o.text;
+      select.appendChild(opt);
     }
-    if (!cityValue) return { stateFilled, cityFilled: false };
-    const target = cityValue.trim().toLowerCase();
+  }
+  async function pollForCityMatch(root, scope, cityLabel, occurrence, cityValue, target, pollMs, timeoutMs) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const cityEl = findNthFieldByLabel(root, scope, cityLabel, occurrence);
       if (cityEl instanceof HTMLSelectElement) {
         const hasMatch = Array.from(cityEl.options).some((o) => o.textContent?.trim().toLowerCase() === target);
         if (hasMatch && cityEl.id) {
-          return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
+          const options = Array.from(cityEl.options).map((o) => ({ value: o.value, text: o.textContent ?? "" }));
+          return { filled: fillField(`#${cssEscape(cityEl.id)}`, cityValue), isSelect: true, options };
         }
       } else if (cityEl?.id) {
-        return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
+        return { filled: fillField(`#${cssEscape(cityEl.id)}`, cityValue), isSelect: false, options: null };
       }
       await new Promise((resolve) => setTimeout(resolve, pollMs));
     }
-    return { stateFilled, cityFilled: false };
+    return { filled: false, isSelect: true, options: null };
+  }
+  async function fillStateThenCity(root, scope, stateLabel, cityLabel, stateValue, cityValue, occurrence, options = {}) {
+    const pollMs = options.pollMs ?? 200;
+    const timeoutMs = options.timeoutMs ?? 4e3;
+    let stateFilled = false;
+    let stateOptionValue = "";
+    if (stateValue) {
+      const stateEl = findNthFieldByLabel(root, scope, stateLabel, occurrence);
+      if (stateEl instanceof HTMLSelectElement) {
+        const matched = Array.from(stateEl.options).find(
+          (o) => o.textContent?.trim().toLowerCase() === stateValue.trim().toLowerCase()
+        );
+        stateOptionValue = matched?.value ?? "";
+      }
+      if (stateEl?.id) stateFilled = fillField(`#${cssEscape(stateEl.id)}`, stateValue);
+    }
+    if (!cityValue) return { stateFilled, cityFilled: false };
+    const target = cityValue.trim().toLowerCase();
+    const firstTry = await pollForCityMatch(
+      root,
+      scope,
+      cityLabel,
+      occurrence,
+      cityValue,
+      target,
+      pollMs,
+      Math.min(timeoutMs, 1500)
+    );
+    if (firstTry.filled) {
+      if (stateOptionValue && firstTry.options) cityOptionsCache.set(stateOptionValue, firstTry.options);
+      return { stateFilled, cityFilled: true };
+    }
+    if (!firstTry.isSelect) return { stateFilled, cityFilled: false };
+    const cached = stateOptionValue ? cityOptionsCache.get(stateOptionValue) : void 0;
+    if (cached) {
+      const cityEl = findNthFieldByLabel(root, scope, cityLabel, occurrence);
+      if (cityEl instanceof HTMLSelectElement && cityEl.id) {
+        rebuildSelectOptions(cityEl, cached);
+        return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
+      }
+    }
+    const remaining = timeoutMs - 1500;
+    if (remaining <= 0) return { stateFilled, cityFilled: false };
+    const secondTry = await pollForCityMatch(root, scope, cityLabel, occurrence, cityValue, target, pollMs, remaining);
+    if (secondTry.filled && stateOptionValue && secondTry.options) {
+      cityOptionsCache.set(stateOptionValue, secondTry.options);
+    }
+    return { stateFilled, cityFilled: secondTry.filled };
   }
 
   // src/attendants.ts
@@ -189,7 +239,6 @@
       return { attendantsFilled: 0, fieldsFilled: 0, fieldsTotal: 0, stoppedEarly: true };
     }
     const clickAdd = options.clickAdd ?? (() => findAddButton(root)?.click());
-    const postAddSettleMs = options.postAddSettleMs ?? 2e3;
     let attendantsFilled = 0;
     let fieldsFilled = 0;
     let fieldsTotal = 0;
@@ -206,7 +255,6 @@
         return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: true };
       }
       tickLatestOwnerCheckbox(root);
-      await new Promise((resolve) => setTimeout(resolve, postAddSettleMs));
     }
     return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: false };
   }
