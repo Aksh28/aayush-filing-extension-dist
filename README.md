@@ -31,12 +31,12 @@ below has the same files — but every future fix means repeating the
 download/extract/Load-unpacked steps from scratch. The `git clone` + `git
 pull` route above avoids that entirely.
 
-**2026-11-03 update** — fixed three real bugs found during live testing on the government portal:
+**2026-11-03 update** — fixed real bugs found during live testing on the government portal, confirmed against the actual portal HTML:
 - "Add" button for a second/third attendant was a silent no-op — the button's text really is exactly "Add", but the code was picking the first element anywhere on the page whose text normalized to "add", which can grab the wrong control on a long form with more than one "Add" button. Now scoped to only match within the attendant section.
-- Date of Birth (patient and attendant) never filled — the portal expects `DD/MM/YYYY`, our data is ISO `YYYY-MM-DD` — now converted at fill time.
-- City/District never filled — the real label has spaces around the slash ("City / District") which didn't match our canonical "City/District" — label matching now tolerates that.
+- Date of Birth (patient and attendant) never filled correctly — the portal's field is a plain text input expecting `DD/MM/YYYY`; our data is ISO `YYYY-MM-DD` — now converted at fill time.
+- **City/District never filled (real cause, confirmed from the live DOM)**: it's a `<select>` whose options are repopulated by the portal's own AJAX call (`showcities()`) once State is set. The old code filled State and City/District in the same synchronous pass, before that AJAX call could possibly land, so it was matching against a stale options list. Now State is filled first, then the code polls (re-finding the field each tick, since the AJAX response can replace the `<select>` node entirely) until the real options for that state actually appear, before filling City/District.
 
-State fills itself automatically once City/District is set (confirmed live) — nothing to fix there.
+57 tests pass, including new ones covering all of the above.
 
 ## Install on the other laptop
 

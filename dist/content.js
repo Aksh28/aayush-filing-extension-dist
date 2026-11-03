@@ -84,6 +84,7 @@
     let total = 0;
     for (const key of Object.keys(labels)) {
       const labelText = labels[key];
+      if (!labelText) continue;
       const value = data[key];
       if (typeof value !== "string" || !value) continue;
       total++;
@@ -92,6 +93,31 @@
       if (fillField(`#${cssEscape(el.id)}`, value)) filled++;
     }
     return { filled, total };
+  }
+  async function fillStateThenCity(root, scope, stateLabel, cityLabel, stateValue, cityValue, occurrence, options = {}) {
+    const pollMs = options.pollMs ?? 200;
+    const timeoutMs = options.timeoutMs ?? 4e3;
+    let stateFilled = false;
+    if (stateValue) {
+      const stateEl = findNthFieldByLabel(root, scope, stateLabel, occurrence);
+      if (stateEl?.id) stateFilled = fillField(`#${cssEscape(stateEl.id)}`, stateValue);
+    }
+    if (!cityValue) return { stateFilled, cityFilled: false };
+    const target = cityValue.trim().toLowerCase();
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const cityEl = findNthFieldByLabel(root, scope, cityLabel, occurrence);
+      if (cityEl instanceof HTMLSelectElement) {
+        const hasMatch = Array.from(cityEl.options).some((o) => o.textContent?.trim().toLowerCase() === target);
+        if (hasMatch && cityEl.id) {
+          return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
+        }
+      } else if (cityEl?.id) {
+        return { stateFilled, cityFilled: fillField(`#${cssEscape(cityEl.id)}`, cityValue) };
+      }
+      await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return { stateFilled, cityFilled: false };
   }
 
   // src/attendants.ts
@@ -112,6 +138,7 @@
     email: "Email Id",
     relationshipWithPatient: "Relationship with the patient"
   };
+  var { stateIndia: _stateIndia, cityDistrictIndia: _cityDistrictIndia, ...ATTENDANT_SYNC_FIELD_LABELS } = ATTENDANT_FIELD_LABELS;
   function findAddButton(root) {
     const heading = findSectionHeading(root, "Details of Attendant");
     const candidates = Array.from(
@@ -132,7 +159,7 @@
     return { start: heading, end: addButton ?? heading };
   }
   function fillAttendantBlock(root, scope, occurrence, data) {
-    return fillFieldsByLabel(root, scope, occurrence, data, ATTENDANT_FIELD_LABELS);
+    return fillFieldsByLabel(root, scope, occurrence, data, ATTENDANT_SYNC_FIELD_LABELS);
   }
   async function ensureAttendantBlocksExist(count, options) {
     for (let i = 1; i < count; i++) {
@@ -178,6 +205,7 @@
     contactNumberIndia: "Contact Number (In India)",
     contactEmail: "Email Id"
   };
+  var { stateIndia: _stateIndia2, cityDistrictIndia: _cityDistrictIndia2, ...PATIENT_SYNC_FIELD_LABELS } = PATIENT_FIELD_LABELS;
   var TREATMENT_FIELD_LABELS = {
     diagnosisTreatment: "Diagnosis/Proposed Treatment",
     doctorName: "Name of Doctor",
@@ -194,7 +222,7 @@
   function fillPatientFields(root, data) {
     const scope = getSectionScope(root, "Details of the Patient");
     if (!scope) return { filled: 0, total: 0 };
-    return fillFieldsByLabel(root, scope, 0, data, PATIENT_FIELD_LABELS);
+    return fillFieldsByLabel(root, scope, 0, data, PATIENT_SYNC_FIELD_LABELS);
   }
   function fillTreatmentFields(root, data) {
     const scope = getSectionScope(root, "Details of Treatment");
@@ -20565,16 +20593,52 @@ ${suffix}`;
       let attendantsFilled = 0;
       let attendantFieldsFilled = 0;
       let attendantFieldsTotal = 0;
+      let readyAttendants = [];
       if (attendantsReady.blocksReady > 0) {
-        const ready = attendants.slice(0, attendantsReady.blocksReady);
-        const result = fillAllAttendantBlocks(document, ready);
+        readyAttendants = attendants.slice(0, attendantsReady.blocksReady);
+        const result = fillAllAttendantBlocks(document, readyAttendants);
         attendantsFilled = result.attendantsFilled;
         attendantFieldsFilled = result.fieldsFilled;
         attendantFieldsTotal = result.fieldsTotal;
       }
+      let locationFilled = 0;
+      let locationTotal = 0;
+      const patientScope = getSectionScope(document, "Details of the Patient");
+      if (patientScope) {
+        if (patientData.stateIndia) locationTotal++;
+        if (patientData.cityDistrictIndia) locationTotal++;
+        const cascade = await fillStateThenCity(
+          document,
+          patientScope,
+          "State",
+          "City/District",
+          patientData.stateIndia,
+          patientData.cityDistrictIndia,
+          0
+        );
+        if (cascade.stateFilled) locationFilled++;
+        if (cascade.cityFilled) locationFilled++;
+      }
+      for (let i = 0; i < readyAttendants.length; i++) {
+        const attendantScope = getAttendantSectionScope(document);
+        if (!attendantScope) break;
+        if (readyAttendants[i].stateIndia) locationTotal++;
+        if (readyAttendants[i].cityDistrictIndia) locationTotal++;
+        const cascade = await fillStateThenCity(
+          document,
+          attendantScope,
+          "State",
+          "City/District",
+          readyAttendants[i].stateIndia,
+          readyAttendants[i].cityDistrictIndia,
+          i
+        );
+        if (cascade.stateFilled) locationFilled++;
+        if (cascade.cityFilled) locationFilled++;
+      }
       sendResponse({
-        filled: patientResult.filled + treatmentResult.filled + attendantFieldsFilled,
-        total: patientResult.total + treatmentResult.total + attendantFieldsTotal,
+        filled: patientResult.filled + treatmentResult.filled + attendantFieldsFilled + locationFilled,
+        total: patientResult.total + treatmentResult.total + attendantFieldsTotal + locationTotal,
         attendantsFilled,
         attendantsExpected: message.data.attendants.length,
         attendantsStoppedEarly: !attendantsReady.ok
