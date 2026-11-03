@@ -1,0 +1,19 @@
+# Aayush Filing Helper — extension bundle
+
+Unpacked Chrome extension build (from `aayush-filing/extension/dist`, built 2026-11-03).
+No dev/test session baked in — this is a clean build; you sign in normally via the popup.
+
+## Install on the other laptop
+
+1. Download `aayush-filing-extension.zip` from this repo and extract it to its own folder.
+2. Open Chrome → `chrome://extensions`.
+3. Turn on **Developer mode** (top-right toggle).
+4. Click **Load unpacked** → select the extracted folder (the one containing `manifest.json`).
+5. Pin the extension, open the popup, sign in with your Aayush Filing account.
+6. Open the portal (`https://indianfrro.gov.in/...`) in a tab — the content script only runs there.
+
+## Notes
+
+- `host_permissions` only cover the FRRO portal and this project's Supabase project — nothing else.
+- Only the public Supabase anon key is embedded in the bundle (RLS-protected, meant to be public client-side) — no secrets.
+- CAPTCHA and the final Submit click are intentionally NOT automated — do those yourself.
