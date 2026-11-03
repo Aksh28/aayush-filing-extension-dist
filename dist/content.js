@@ -161,29 +161,49 @@
   function fillAttendantBlock(root, scope, occurrence, data) {
     return fillFieldsByLabel(root, scope, occurrence, data, ATTENDANT_SYNC_FIELD_LABELS);
   }
-  async function ensureAttendantBlocksExist(count, options) {
-    for (let i = 1; i < count; i++) {
-      options.clickAdd();
-      const appeared = await options.waitForOccurrence(i);
-      if (!appeared) {
-        return { blocksReady: i, ok: false };
-      }
-    }
-    return { blocksReady: count, ok: true };
+  function getOwnersBlockCount(root) {
+    return root.querySelector("#owners")?.children.length ?? 0;
   }
-  function fillAllAttendantBlocks(root, attendants) {
+  function waitForOwnersCountAbove(root, baseline, options = {}) {
+    const pollMs = options.pollMs ?? 200;
+    const timeoutMs = options.timeoutMs ?? 8e3;
+    return new Promise((resolve) => {
+      const deadline = Date.now() + timeoutMs;
+      const check = () => {
+        if (getOwnersBlockCount(root) > baseline) {
+          resolve(true);
+          return;
+        }
+        if (Date.now() >= deadline) {
+          resolve(false);
+          return;
+        }
+        setTimeout(check, pollMs);
+      };
+      check();
+    });
+  }
+  async function fillAttendantsSequentially(root, attendants, fillOne, options = {}) {
     const scope = getAttendantSectionScope(root);
     if (!scope) {
       return { attendantsFilled: 0, fieldsFilled: 0, fieldsTotal: 0, stoppedEarly: true };
     }
+    const clickAdd = options.clickAdd ?? (() => findAddButton(root)?.click());
     let attendantsFilled = 0;
     let fieldsFilled = 0;
     let fieldsTotal = 0;
     for (let i = 0; i < attendants.length; i++) {
-      const result = fillAttendantBlock(root, scope, i, attendants[i]);
+      const result = await fillOne(attendants[i]);
       fieldsFilled += result.filled;
       fieldsTotal += result.total;
       if (result.filled > 0) attendantsFilled++;
+      if (i === attendants.length - 1) continue;
+      const before = getOwnersBlockCount(root);
+      clickAdd();
+      const committed = await waitForOwnersCountAbove(root, before, options);
+      if (!committed) {
+        return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: true };
+      }
     }
     return { attendantsFilled, fieldsFilled, fieldsTotal, stoppedEarly: false };
   }
@@ -20555,37 +20575,30 @@ ${suffix}`;
   );
 
   // src/content.ts
-  var ADD_CLICK_POLL_MS = 200;
-  var ADD_CLICK_TIMEOUT_MS = 8e3;
-  function waitForAttendantBlock(occurrence) {
-    return new Promise((resolve) => {
-      const startedAt = Date.now();
-      const check = () => {
-        const scope = getAttendantSectionScope(document);
-        const marker = scope && findNthFieldByLabel(document, scope, "Surname", occurrence);
-        if (marker) {
-          resolve(true);
-          return;
-        }
-        if (Date.now() - startedAt >= ADD_CLICK_TIMEOUT_MS) {
-          resolve(false);
-          return;
-        }
-        setTimeout(check, ADD_CLICK_POLL_MS);
-      };
-      check();
-    });
+  async function fillOneAttendant(attendant) {
+    const scope = getAttendantSectionScope(document);
+    if (!scope) return { filled: 0, total: 0 };
+    const base = fillAttendantBlock(document, scope, 0, attendant);
+    let locationFilled = 0;
+    let locationTotal = 0;
+    if (attendant.stateIndia) locationTotal++;
+    if (attendant.cityDistrictIndia) locationTotal++;
+    const cascade = await fillStateThenCity(
+      document,
+      scope,
+      "State",
+      "City/District",
+      attendant.stateIndia,
+      attendant.cityDistrictIndia,
+      0
+    );
+    if (cascade.stateFilled) locationFilled++;
+    if (cascade.cityFilled) locationFilled++;
+    return { filled: base.filled + locationFilled, total: base.total + locationTotal };
   }
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.type !== "AUTOFILL_CASE") return;
     (async () => {
-      let attendantsReady = { blocksReady: 0, ok: true };
-      if (message.data.attendants.length > 0) {
-        attendantsReady = await ensureAttendantBlocksExist(message.data.attendants.length, {
-          clickAdd: () => findAddButton(document)?.click(),
-          waitForOccurrence: waitForAttendantBlock
-        });
-      }
       const patientData = { ...message.data.patient, dateOfBirth: toPortalDate(message.data.patient.dateOfBirth) };
       const attendants = message.data.attendants.map((a) => ({ ...a, dateOfBirth: toPortalDate(a.dateOfBirth) }));
       const patientResult = fillPatientFields(document, patientData);
@@ -20593,13 +20606,13 @@ ${suffix}`;
       let attendantsFilled = 0;
       let attendantFieldsFilled = 0;
       let attendantFieldsTotal = 0;
-      let readyAttendants = [];
-      if (attendantsReady.blocksReady > 0) {
-        readyAttendants = attendants.slice(0, attendantsReady.blocksReady);
-        const result = fillAllAttendantBlocks(document, readyAttendants);
+      let attendantsStoppedEarly = false;
+      if (attendants.length > 0) {
+        const result = await fillAttendantsSequentially(document, attendants, fillOneAttendant);
         attendantsFilled = result.attendantsFilled;
         attendantFieldsFilled = result.fieldsFilled;
         attendantFieldsTotal = result.fieldsTotal;
+        attendantsStoppedEarly = result.stoppedEarly;
       }
       let locationFilled = 0;
       let locationTotal = 0;
@@ -20619,29 +20632,12 @@ ${suffix}`;
         if (cascade.stateFilled) locationFilled++;
         if (cascade.cityFilled) locationFilled++;
       }
-      for (let i = 0; i < readyAttendants.length; i++) {
-        const attendantScope = getAttendantSectionScope(document);
-        if (!attendantScope) break;
-        if (readyAttendants[i].stateIndia) locationTotal++;
-        if (readyAttendants[i].cityDistrictIndia) locationTotal++;
-        const cascade = await fillStateThenCity(
-          document,
-          attendantScope,
-          "State",
-          "City/District",
-          readyAttendants[i].stateIndia,
-          readyAttendants[i].cityDistrictIndia,
-          i
-        );
-        if (cascade.stateFilled) locationFilled++;
-        if (cascade.cityFilled) locationFilled++;
-      }
       sendResponse({
         filled: patientResult.filled + treatmentResult.filled + attendantFieldsFilled + locationFilled,
         total: patientResult.total + treatmentResult.total + attendantFieldsTotal + locationTotal,
         attendantsFilled,
         attendantsExpected: message.data.attendants.length,
-        attendantsStoppedEarly: !attendantsReady.ok
+        attendantsStoppedEarly
       });
     })();
     return true;
