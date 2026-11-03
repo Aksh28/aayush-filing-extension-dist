@@ -3,6 +3,13 @@
 Unpacked Chrome extension build (from `aayush-filing/extension/dist`, built 2026-11-03).
 No dev/test session baked in — this is a clean build; you sign in normally via the popup.
 
+**2026-11-03 update** — fixed three real bugs found during live testing on the government portal:
+- "Add" button for a second/third attendant was a silent no-op (real button text is "Add Attendant", not bare "Add") — now matched by whole word, scoped to the attendant section.
+- Date of Birth (patient and attendant) never filled — the portal expects `DD/MM/YYYY`, our data is ISO `YYYY-MM-DD` — now converted at fill time.
+- City/District never filled — the real label has spaces around the slash ("City / District") which didn't match our canonical "City/District" — label matching now tolerates that.
+
+State fills itself automatically once City/District is set (confirmed live) — nothing to fix there.
+
 ## Install on the other laptop
 
 1. Download `aayush-filing-extension.zip` from this repo and extract it to its own folder.
