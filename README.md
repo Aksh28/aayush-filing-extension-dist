@@ -31,6 +31,8 @@ below has the same files — but every future fix means repeating the
 download/extract/Load-unpacked steps from scratch. The `git clone` + `git
 pull` route above avoids that entirely.
 
+**2026-11-03 update (4)** — the checkbox fix below worked live (confirmed). The 2nd attendant's City/District still didn't hold after a single 300ms recheck — so instead of one retry, it now keeps re-asserting the correct option for ~2.5 seconds after filling, re-filling every time something knocks it off, since re-filling an already-correct value is harmless.
+
 **2026-11-03 update (3)** — the attendant rebuild below worked live (confirmed). Two follow-up bugs found and fixed from that same live test:
 - Each snapshotted attendant block has its own `ownchecks` checkbox that has to be ticked for that attendant to actually be selected/included — our code never touched it. Now ticked automatically right after each block is confirmed added.
 - The 2nd attendant's City/District silently came back empty even though it filled correctly — the entry area's own AJAX-driven City/District reset (same mechanism as State→City) was landing late, after our fill, and wiping it back out. Now re-checked ~300ms after filling and re-filled if something reset it underneath us.
